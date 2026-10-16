@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foldersum"
+version = "0.1.0"
+description = "Summarize the contents of a folder of mixed documents (PDF, images, ...)"
+readme = "CLAUDE.md"
+requires-python = ">=3.11"
+dependencies = [
+    "gdown>=5.2",
+    "pillow>=10.4",
+    "pypdf>=5.0",
+    "pypdfium2>=4.30",
+    "pytesseract>=0.3.13",
+    "ollama>=0.4",
+    "anthropic>=0.40",
+    "langdetect>=1.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8",
+    "pytest-cov>=5",
+]
+
+[project.scripts]
+foldersum = "foldersum.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+foldersum = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF", "N", "S", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert в тестах - норма
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["gdown.*", "pytesseract.*", "langdetect.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["foldersum"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
