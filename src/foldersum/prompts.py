@@ -21,7 +21,11 @@ _FENCE_TAG = re.compile(r"</?\s*(?:document|summaries)\b[^>]*>", re.IGNORECASE)
 
 def clean_text(text: str) -> str:
     """Remove the fence tags from text that will be placed inside a fenced prompt block."""
-    return _FENCE_TAG.sub("", text)
+    while True:  # repeat: removing a tag can join the pieces around it into a new tag
+        cleaned = _FENCE_TAG.sub("", text)
+        if cleaned == text:
+            return cleaned
+        text = cleaned
 
 
 def clean_name(name: str) -> str:

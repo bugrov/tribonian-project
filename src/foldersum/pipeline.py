@@ -26,6 +26,7 @@ class FileResult:
     lang: Lang | None = None
     warnings: tuple[str, ...] = ()
     error: str | None = None
+    empty: bool = False  # read fine, but contained no text, so nothing was summarized
 
 
 @dataclass(frozen=True)
@@ -59,18 +60,15 @@ class Summarizer:
         for number, source in enumerate(sources, 1):
             self._progress(f"[{number}/{len(sources)}] {source.path.name}")
             results.append(self._summarize_file(source))
-        summaries = [
-            (r.source.path.name, r.summary)
-            for r in results
-            if r.summary and r.summary != self._prompts.no_text
-        ]
+        summaries = [(r.source.path.name, r.summary) for r in results if r.summary and not r.empty]
         return FolderSummary(overall=self._overall(summaries), files=tuple(results))
 
     def summarize_document(self, doc: ExtractedDoc) -> str:
         """Summarize one document, splitting it into chunks when it is too long for the model."""
         name = clean_name(doc.source.path.name)
         hint = self._prompts.doc_lang[doc.lang]
-        chunks = [clean_text(chunk) for chunk in split_text(doc.text, self._chunk_chars)]
+        cleaned = (clean_text(chunk) for chunk in split_text(doc.text, self._chunk_chars))
+        chunks = [chunk for chunk in cleaned if chunk.strip()]
         if not chunks:
             return self._prompts.no_text
         if len(chunks) == 1:
@@ -98,6 +96,7 @@ class Summarizer:
                 summary=self._prompts.no_text,
                 lang=doc.lang,
                 warnings=doc.warnings,
+                empty=True,
             )
         summary = self.summarize_document(doc)
         return FileResult(source=source, summary=summary, lang=doc.lang, warnings=doc.warnings)

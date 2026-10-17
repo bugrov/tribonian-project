@@ -9,7 +9,7 @@ CLI-программа на Python, которая делает общее са�
 
 Реализуется по шагам, после каждого шага остановка на проверки и ревью пользователем.
 Выполнены: шаг 0 (каркас), шаг 1 (scan/fetch), шаг 2 (экстракторы, OCR, язык), шаг 3 (Ollama-бэкенд,
-чанкинг, map-reduce; CLI ещё нет). Дальше: шаг 4 (CLI и рендер). Подробный план: `C:\Users\Sanya\.claude\plans\sequential-sleeping-spring.md`.
+чанкинг, map-reduce), шаг 4 (CLI, вывод md/json). Дальше: шаг 5 (Claude-бэкенд). Подробный план: `C:\Users\Sanya\.claude\plans\sequential-sleeping-spring.md`.
 
 ## Архитектура
 
@@ -40,11 +40,18 @@ tests/              # pytest, моки бэкендов (без сети и бе
 ## Как вызывать
 
 ```bash
-python -m foldersum <путь|ссылка Drive> [--per-file] [--backend ollama|claude] \
-    [--lang ru|en] [--format md|json] [--output FILE] [--model NAME]
+python -m foldersum <путь|ссылка Drive> [--per-file] [--backend ollama] \
+    [--lang ru|en] [--format md|json] [--output FILE] [--model NAME] [--host URL] \
+    [--chunk-chars N] [--download-dir DIR] [--quiet]
 ```
 
-Бэкенд по умолчанию: `ollama` (локально, модель `qwen2.5:7b`; для 4 ГБ VRAM можно `--model qwen2.5:3b`).
+(`--backend claude` появится на шаге 5.) Бэкенд по умолчанию: `ollama` (локально, модель
+`qwen2.5:7b`; для быстрого прогона можно `--model qwen2.5:3b`). Результат идёт в stdout (UTF-8),
+прогресс - в stderr (`--quiet` отключает). `--output` нельзя указывать внутрь сканируемой папки.
+
+Коды выхода: 0 - успех (в т.ч. если часть файлов не обработалась: они перечислены в отчёте);
+1 - нет файлов или ни из одного не удалось получить текст; 2 - неверный источник;
+3 - ошибка модели (Ollama недоступен, нет модели и т.п.); 4 - ошибка `--output`.
 
 ## Окружение
 

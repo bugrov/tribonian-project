@@ -9,6 +9,16 @@ def test_clean_text_removes_fence_tags_case_insensitively() -> None:
     assert clean_text(dirty) == "a  b  c  d  e"
 
 
+def test_clean_text_removes_tags_rebuilt_by_the_removal_itself() -> None:
+    nested = "x <docu<document>ment> y </summ</summaries>aries> z"
+
+    cleaned = clean_text(nested)
+
+    assert "<document" not in cleaned.lower()
+    assert "</summaries" not in cleaned.lower()
+    assert cleaned == "x  y  z"
+
+
 def test_clean_text_keeps_ordinary_markup() -> None:
     assert clean_text("<b>bold</b> and <documentary>") == "<b>bold</b> and <documentary>"
 

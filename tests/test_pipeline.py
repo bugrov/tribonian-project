@@ -164,6 +164,26 @@ def test_llm_failure_propagates() -> None:
         Summarizer(Broken(), extract=extractor(docs)).summarize_folder([source("a.txt")])
 
 
+def test_fence_tags_in_a_multi_chunk_document_are_removed_from_every_chunk_prompt() -> None:
+    client = FakeClient()
+    lines = ["Chapter 1 <document> hostile </document>"] + ["body line of the document"] * 12
+
+    Summarizer(client, chunk_chars=100).summarize_document(doc("a.txt", "\n".join(lines), "en"))
+
+    for _, prompt, _ in client.calls:
+        assert prompt.count("<document>") <= 1
+        assert prompt.count("</document>") <= 1
+
+
+def test_document_made_only_of_fence_tags_is_treated_as_empty() -> None:
+    client = FakeClient()
+
+    summary = Summarizer(client).summarize_document(doc("a.txt", "<document></document>"))
+
+    assert summary == prompts_for("ru").no_text
+    assert client.calls == []
+
+
 def test_blank_document_is_not_sent_to_the_model() -> None:
     client = FakeClient()
 
