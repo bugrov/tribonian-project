@@ -27,11 +27,19 @@ class FakeClient:
         return f"SUMMARY{len(self.prompts)}"
 
 
+class FakeClaude(FakeClient):
+    """Stands in for ClaudeClient (which has no host option)."""
+
+    def __init__(self, model: str) -> None:
+        super().__init__(model)
+
+
 @pytest.fixture(autouse=True)
-def fake_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+def fake_backends(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.created = []
     FakeClient.fail = False
     monkeypatch.setattr(cli, "OllamaClient", FakeClient)
+    monkeypatch.setattr(cli, "ClaudeClient", FakeClaude)
 
 
 @pytest.fixture
@@ -268,3 +276,75 @@ def test_stdout_receives_utf8_bytes(
     cli.main([str(folder), "--quiet"])
 
     assert "Саммари папки".encode() in capfdbinary.readouterr().out
+
+
+def test_ollama_is_the_default_backend_with_its_default_model(folder: Path) -> None:
+    cli.main([str(folder), "--quiet"])
+
+    client = FakeClient.created[0]
+    assert not isinstance(client, FakeClaude)
+    assert client.model == "qwen2.5:7b"
+
+
+def test_claude_backend_uses_its_own_default_model(folder: Path) -> None:
+    code = cli.main([str(folder), "--backend", "claude", "--quiet"])
+
+    client = FakeClient.created[0]
+    assert code == cli.EXIT_OK
+    assert isinstance(client, FakeClaude)
+    assert client.model == "claude-opus-5-5"
+
+
+def test_model_option_overrides_the_claude_default(folder: Path) -> None:
+    cli.main([str(folder), "--backend", "claude", "--model", "claude-haiku-5-5", "--quiet"])
+
+    assert FakeClient.created[0].model == "claude-haiku-5-5"
+
+
+def test_claude_takes_big_chunks_and_ollama_small_ones(tmp_path: Path) -> None:
+    root = tmp_path / "docs"
+    root.mkdir()
+    (root / "long.txt").write_text(chr(10).join(f"line {i} of the text" for i in range(900)))
+
+    cli.main([str(root), "--backend", "claude", "--quiet"])
+    claude_calls = len(FakeClient.created[0].prompts)
+    FakeClient.created.clear()
+    cli.main([str(root), "--quiet"])
+    ollama_calls = len(FakeClient.created[0].prompts)
+
+    assert claude_calls == 1
+    assert ollama_calls > 1
+
+
+def test_chunk_chars_option_overrides_the_backend_default(tmp_path: Path) -> None:
+    root = tmp_path / "docs"
+    root.mkdir()
+    (root / "long.txt").write_text(chr(10).join(f"line {i} of the text" for i in range(900)))
+
+    cli.main([str(root), "--backend", "claude", "--chunk-chars", "500", "--quiet"])
+
+    assert len(FakeClient.created[0].prompts) > 1
+
+
+def test_progress_names_the_backend_and_model(
+    folder: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.main([str(folder), "--backend", "claude"])
+
+    assert "claude backend, model claude-opus-5-5" in capsys.readouterr().err
+
+
+def test_unknown_backend_is_rejected(folder: Path) -> None:
+    with pytest.raises(SystemExit) as info:
+        cli.main([str(folder), "--backend", "gpt"])
+
+    assert info.value.code == 2
+
+
+def test_host_with_the_claude_backend_warns(
+    folder: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = cli.main([str(folder), "--backend", "claude", "--host", "http://h:1", "--quiet"])
+
+    assert code == cli.EXIT_OK
+    assert "--host is ignored" in capsys.readouterr().err

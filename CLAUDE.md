@@ -9,7 +9,9 @@ CLI-программа на Python, которая делает общее са�
 
 Реализуется по шагам, после каждого шага остановка на проверки и ревью пользователем.
 Выполнены: шаг 0 (каркас), шаг 1 (scan/fetch), шаг 2 (экстракторы, OCR, язык), шаг 3 (Ollama-бэкенд,
-чанкинг, map-reduce), шаг 4 (CLI, вывод md/json). Дальше: шаг 5 (Claude-бэкенд). Подробный план: `C:\Users\Sanya\.claude\plans\sequential-sleeping-spring.md`.
+чанкинг, map-reduce), шаг 4 (CLI, вывод md/json), шаг 5 (Claude-бэкенд и `--backend`).
+Дальше (по желанию): шаг 6 (docx/xlsx/pptx), шаг 7 (финальный прогон и документация).
+Подробный план: `C:\Users\Sanya\.claude\plans\sequential-sleeping-spring.md`.
 
 ## Архитектура
 
@@ -26,9 +28,11 @@ src/foldersum/
     text.py         # txt/md/csv
     office.py       # docx/xlsx/pptx (позже)
   summarizers/
-    base.py         # Protocol Summarizer: summarize(doc), combine(summaries)
+    base.py         # Protocol LlmClient.generate(system, prompt, max_tokens) + общий повтор при обрыве по токенам
     ollama.py       # локальная LLM (по умолчанию)
     claude.py       # Anthropic API (переключатель --backend claude)
+  prompts.py        # промпты ru/en, ограждение текста документа тегами, защита от prompt injection
+  chunking.py       # разбиение длинных текстов на чанки по строкам/предложениям
   pipeline.py       # map (по файлам, длинное режется на чанки) -> reduce (общее саммари)
   render.py         # вывод markdown/json
 tests/              # pytest, моки бэкендов (без сети и без LLM)
@@ -45,8 +49,11 @@ python -m foldersum <путь|ссылка Drive> [--per-file] [--backend ollama
     [--chunk-chars N] [--download-dir DIR] [--quiet]
 ```
 
-(`--backend claude` появится на шаге 5.) Бэкенд по умолчанию: `ollama` (локально, модель
-`qwen2.5:7b`; для быстрого прогона можно `--model qwen2.5:3b`). Результат идёт в stdout (UTF-8),
+Бэкенд по умолчанию: `ollama` (локально, модель `qwen2.5:7b`; для быстрого прогона можно
+`--model qwen2.5:3b`, размер чанка 4000 символов). `--backend claude` использует Claude API
+(модель по умолчанию `claude-opus-5-5`, дешевле - `--model claude-haiku-5-5`; чанки по 100 000
+символов, поэтому большинство документов идёт одним запросом). **С Claude текст документов
+отправляется в Anthropic.** Результат идёт в stdout (UTF-8),
 прогресс - в stderr (`--quiet` отключает). `--output` нельзя указывать внутрь сканируемой папки.
 
 Коды выхода: 0 - успех (в т.ч. если часть файлов не обработалась: они перечислены в отчёте);
@@ -59,7 +66,19 @@ python -m foldersum <путь|ссылка Drive> [--per-file] [--backend ollama
 - Установка: `py -3.14 -m venv .venv && .venv\Scripts\activate && pip install -e ".[dev]"`.
 - Tesseract OCR с языками `rus` и `eng` (Windows: установщик UB Mannheim) должен быть в PATH.
 - Ollama (https://ollama.com) и модель: `ollama pull qwen2.5:7b`. Адрес задаётся `OLLAMA_HOST`.
-- Для `--backend claude`: переменная `ANTHROPIC_API_KEY`. Ключ не хранить в коде и git.
+- Для `--backend claude`: переменная `ANTHROPIC_API_KEY` (или вход через `ant auth login`).
+  Ключ не хранить в коде и git. Запросы к Claude идут без `temperature` и `thinking` (текущие модели
+  их не принимают), с `effort: low` и запасом токенов на размышление; для моделей, которые это
+  поддерживают, включён серверный fallback при отказе классификаторов безопасности. Реальный
+  вызов API в этой сессии не проверялся (нет ключа): проверены только форма запроса и обработка ошибок.
+
+## Качество саммари на локальной модели
+
+На `qwen2.5:7b` (4 ГБ VRAM, ~3,7 токена/с) саммари в целом верные, но модель бывает копирует
+текст вместо сжатия, иногда придумывает названия и номера разделов и один раз вставила китайский
+текст. Пробовали: строгие промпты, повтор при обрыве по токенам, структурный чанкинг по заголовкам и
+страницам с контекстом раздела. Структурный чанкинг не дал однозначного выигрыша и был откачен.
+Дальше повышать качество стоит моделью (Claude-бэкенд или более крупная локальная), а не промптами.
 
 ## Качество OCR
 

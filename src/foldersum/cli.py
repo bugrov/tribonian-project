@@ -11,7 +11,12 @@ from foldersum.pipeline import DEFAULT_CHUNK_CHARS, Summarizer
 from foldersum.prompts import OutLang
 from foldersum.render import render_json, render_markdown
 from foldersum.scan import scan_folder
+from foldersum.summarizers.base import LlmClient
+from foldersum.summarizers.claude import DEFAULT_CLAUDE_MODEL, ClaudeClient
 from foldersum.summarizers.ollama import DEFAULT_MODEL, OllamaClient
+
+# Claude's context is large enough to take big pieces, so documents rarely need map-reduce.
+CLAUDE_CHUNK_CHARS = 100_000
 
 EXIT_OK = 0
 EXIT_NOTHING_TO_SUMMARIZE = 1  # no files, or none of them yielded any text
@@ -41,6 +46,17 @@ def _positive_int(value: str) -> int:
     return number
 
 
+def _build_client(args: argparse.Namespace) -> tuple[LlmClient, str, int]:
+    """The model client for the chosen backend, its model name and default chunk size."""
+    if args.backend == "claude":
+        if args.host:
+            print("warning: --host is ignored by the claude backend", file=sys.stderr)
+        model = args.model or DEFAULT_CLAUDE_MODEL
+        return ClaudeClient(model=model), model, CLAUDE_CHUNK_CHARS
+    model = args.model or DEFAULT_MODEL
+    return OllamaClient(model=model, host=args.host), model, DEFAULT_CHUNK_CHARS
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="foldersum",
@@ -51,10 +67,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--per-file", action="store_true", help="also print a summary for every file"
     )
     parser.add_argument(
-        "--backend", choices=["ollama"], default="ollama", help="language model backend"
+        "--backend",
+        choices=["ollama", "claude"],
+        default="ollama",
+        help=(
+            "language model backend: local Ollama (default) or the Claude API, which needs "
+            "ANTHROPIC_API_KEY and sends document text to Anthropic"
+        ),
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="model name (default: %(default)s)")
-    parser.add_argument("--host", default=None, help="Ollama server URL (default: OLLAMA_HOST)")
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=f"model name (default: {DEFAULT_MODEL} for ollama, {DEFAULT_CLAUDE_MODEL} for claude)",
+    )
+    parser.add_argument(
+        "--host", default=None, help="Ollama server URL, ollama backend only (default: OLLAMA_HOST)"
+    )
     parser.add_argument(
         "--lang", choices=["ru", "en"], default="ru", help="summary language (default: ru)"
     )
@@ -69,8 +97,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--chunk-chars",
         type=_positive_int,
-        default=DEFAULT_CHUNK_CHARS,
-        help="max characters of text per model request (default: %(default)s)",
+        default=None,
+        help=(
+            f"max characters of text per model request (default: {DEFAULT_CHUNK_CHARS} for "
+            f"ollama, {CLAUDE_CHUNK_CHARS} for claude)"
+        ),
     )
     parser.add_argument("--quiet", action="store_true", help="no progress messages on stderr")
     return parser
@@ -98,9 +129,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {problem}", file=sys.stderr)
         return EXIT_OUTPUT_ERROR
 
-    client = OllamaClient(model=args.model, host=args.host)
-    summarizer = Summarizer(client, out_lang=out_lang, chunk_chars=args.chunk_chars, progress=say)
-    say(f"{len(sources)} file(s) in {root}, model {args.model}")
+    client, model, default_chunk_chars = _build_client(args)
+    chunk_chars = args.chunk_chars or default_chunk_chars
+    summarizer = Summarizer(client, out_lang=out_lang, chunk_chars=chunk_chars, progress=say)
+    say(f"{len(sources)} file(s) in {root}, {args.backend} backend, model {model}")
     try:
         summary = summarizer.summarize_folder(sources)
     except LlmError as exc:

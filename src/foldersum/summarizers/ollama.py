@@ -1,24 +1,14 @@
 """Local language model through Ollama."""
 
-import re
 from typing import Any, Protocol
 
 import httpx
 import ollama
 
 from foldersum.errors import LlmError
+from foldersum.summarizers.base import answer_with_retry
 
 DEFAULT_MODEL = "qwen2.5:7b"
-
-_SENTENCE_END = re.compile(r"[.!?…»)](?=\s|$)")
-
-
-def _drop_unfinished_sentence(text: str) -> str:
-    """An answer cut off by the token limit ends mid-sentence: keep whole sentences only."""
-    ends = [m.end() for m in _SENTENCE_END.finditer(text)]
-    if not ends or ends[-1] < len(text) // 2:
-        return text
-    return text[: ends[-1]]
 
 
 class ChatApi(Protocol):
@@ -46,17 +36,10 @@ class OllamaClient:
         self._client: ChatApi = client or ollama.Client(host=host, timeout=timeout)
 
     def generate(self, system: str, prompt: str, max_tokens: int) -> str:
-        """Answer the prompt; an answer cut off by the token limit is retried once with twice
-        the limit, and only if it is still cut off (or the retry fails) is the unfinished last
-        sentence dropped."""
-        answer, truncated = self._chat(system, prompt, max_tokens, check_context=True)
-        if not truncated:
-            return answer
-        try:
-            retry, retry_truncated = self._chat(system, prompt, max_tokens * 2, check_context=False)
-        except LlmError:
-            return _drop_unfinished_sentence(answer)
-        return _drop_unfinished_sentence(retry) if retry_truncated else retry
+        return answer_with_retry(
+            lambda tokens, first: self._chat(system, prompt, tokens, check_context=first),
+            max_tokens,
+        )
 
     def _chat(
         self, system: str, prompt: str, max_tokens: int, check_context: bool

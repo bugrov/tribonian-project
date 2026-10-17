@@ -18,11 +18,12 @@ dependencies = [
     "pypdfium2>=4.30",
     "pytesseract>=0.3.13",
     "ollama>=0.4",
-    "anthropic>=0.40",
+    "anthropic>=1.15",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "httpx2",
     "ruff>=0.6",
     "mypy>=1.11",
     "pytest>=8",
