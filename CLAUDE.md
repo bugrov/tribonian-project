@@ -53,6 +53,16 @@ python -m foldersum <путь|ссылка Drive> [--per-file] [--backend ollama
 - Ollama (https://ollama.com) и модель: `ollama pull qwen2.5:7b`. Адрес задаётся `OLLAMA_HOST`.
 - Для `--backend claude`: переменная `ANTHROPIC_API_KEY`. Ключ не хранить в коде и git.
 
+## Качество OCR
+
+Перед OCR картинка переводится в градации серого, масштабируется до ~2400 px по длинной стороне
+и выравнивается по освещению (деление на сильно размытую копию, `ocr.prepare_for_ocr`).
+Замер на двух фото страниц кодекса против вручную набранного эталона (доля слов эталона,
+найденных точно): было 71,5% / 84,9% (увеличение ×2 + автоконтраст), стало 92,4% / 93,6%.
+Проверено и отвергнуто: Otsu и adaptive-бинаризация (хуже), deskew (в пределах погрешности),
+`tessdata_best` (+0,6 п.п. в среднем при 2,5x времени). Пакеты языков лежат в `~/tessdata`
+(`rus`, `eng`, `osd` из `tessdata_fast`); при желании `TESSDATA_PREFIX` можно направить на `tessdata_best`.
+
 ## Git
 
 Remote: `git@github.com:bugrov/tribonian-project.git`, ветка `main`.

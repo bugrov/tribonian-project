@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 
 class FileKind(StrEnum):
@@ -22,3 +23,17 @@ class SourceFile:
     path: Path
     kind: FileKind
     size: int
+
+
+Lang = Literal["ru", "en", "unknown"]
+
+
+@dataclass(frozen=True)
+class ExtractedDoc:
+    """Text pulled out of a source file, with the detected document language."""
+
+    source: SourceFile
+    text: str
+    lang: Lang
+    pages: int | None = None
+    warnings: tuple[str, ...] = ()

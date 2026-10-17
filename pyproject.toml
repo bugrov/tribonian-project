@@ -10,13 +10,14 @@ readme = "CLAUDE.md"
 requires-python = ">=3.11"
 dependencies = [
     "gdown>=5.2",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
     "pillow>=10.4",
     "pypdf>=5.0",
     "pypdfium2>=4.30",
     "pytesseract>=0.3.13",
     "ollama>=0.4",
     "anthropic>=0.40",
-    "langdetect>=1.0.9",
 ]
 
 [project.optional-dependencies]
@@ -53,11 +54,12 @@ python_version = "3.11"
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["gdown.*", "pytesseract.*", "langdetect.*"]
+module = ["gdown.*", "pytesseract.*", "pypdfium2.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--cov --cov-report=term-missing"
 
 [tool.coverage.run]
