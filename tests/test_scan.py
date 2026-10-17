@@ -94,10 +94,11 @@ def test_scan_skips_symlinks_and_directories_named_like_files(tmp_path: Path) ->
     assert scan_folder(root) == []
 
 
-def test_unreadable_file_is_reported_as_unknown(
+def test_unreadable_file_keeps_the_kind_its_extension_suggests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "a.pdf").write_bytes(PDF_HEAD)
+    (tmp_path / "mystery.bin").write_bytes(b"x")
 
     def deny(_: Path) -> FileKind:
         raise PermissionError("denied")
@@ -106,4 +107,4 @@ def test_unreadable_file_is_reported_as_unknown(
 
     files = scan_folder(tmp_path)
 
-    assert [(f.kind, f.size) for f in files] == [(FileKind.UNKNOWN, 0)]
+    assert [(f.kind, f.size) for f in files] == [(FileKind.PDF, 0), (FileKind.UNKNOWN, 0)]

@@ -39,7 +39,7 @@ def test_markdown_without_per_file_has_overall_stats_and_failures_only() -> None
     text = render_markdown(sample(), ROOT, per_file=False)
 
     assert text.startswith("# Саммари папки\n\nОбщее саммари.\n")
-    assert "Файлов: 3, обработано: 2, с ошибками: 1." in text
+    assert "Файлов: 3, обработано: 2, пропущено: 0, с ошибками: 1." in text
     assert "## Не удалось обработать" in text
     assert "- bad.pdf: broken pdf" in text
     assert "## Файлы" not in text
@@ -61,7 +61,7 @@ def test_markdown_in_english() -> None:
     text = render_markdown(sample(), ROOT, per_file=True, out_lang="en")
 
     assert text.startswith("# Folder summary")
-    assert "Files: 3, processed: 2, failed: 1." in text
+    assert "Files: 3, processed: 2, skipped: 0, failed: 1." in text
     assert "## Could not be processed" in text
     assert "## Files" in text
 
@@ -125,3 +125,36 @@ def test_markdown_file_names_and_errors_cannot_break_the_structure() -> None:
     assert chr(10) + "# injected" not in text
     assert chr(10) + "## fake heading" not in text
     assert "### evil # injected.txt" in text
+
+
+def skipped_file(name: str) -> FileResult:
+    return FileResult(
+        source=SourceFile(path=ROOT / name, kind=FileKind.UNKNOWN, size=1),
+        summary=None,
+        error="Unsupported file type (unknown): " + name,
+        skipped=True,
+    )
+
+
+def test_unsupported_files_are_listed_as_skipped_not_failed() -> None:
+    summary = FolderSummary(overall="o", files=(result("a.txt"), skipped_file("Thumbs.db")))
+
+    text = render_markdown(summary, ROOT, per_file=True)
+
+    assert "обработано: 1, пропущено: 1, с ошибками: 0" in text
+    assert "## Пропущены (неподдерживаемый формат)" in text
+    assert "- Thumbs.db" in text
+    assert "Не удалось обработать" not in text
+    assert "### Thumbs.db" not in text
+
+
+def test_skipped_files_in_json() -> None:
+    summary = FolderSummary(overall="o", files=(result("a.txt"), skipped_file("Thumbs.db")))
+
+    data = json.loads(render_json(summary, ROOT, per_file=True))
+
+    assert data["files_skipped"] == 1
+    assert data["files_failed"] == 0
+    assert data["errors"] == []
+    assert data["skipped"] == ["Thumbs.db"]
+    assert [f["skipped"] for f in data["files"]] == [False, True]

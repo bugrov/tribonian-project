@@ -5,7 +5,7 @@ import anthropic
 import httpx2
 import pytest
 
-from foldersum.errors import LlmError
+from foldersum.errors import LlmContentError, LlmError
 from foldersum.summarizers.claude import DEFAULT_CLAUDE_MODEL, ClaudeClient
 
 
@@ -195,3 +195,23 @@ def test_thinking_only_truncation_twice_is_an_error() -> None:
 
     with pytest.raises(LlmError, match="no answer within the token limit"):
         ClaudeClient(messages=fake).generate("s", "p", 300)
+
+
+def test_other_sdk_errors_become_llm_errors() -> None:
+    error = anthropic.APIError("weird response", request=request(), body=None)
+
+    with pytest.raises(LlmError, match="weird response"):
+        ClaudeClient(messages=FakeMessages(error)).generate("s", "p", 10)
+
+
+def test_refusal_and_empty_answer_only_fail_the_file_but_credentials_fail_the_run() -> None:
+    refusal = text_response("", stop_reason="refusal")
+    with pytest.raises(LlmContentError):
+        ClaudeClient(messages=FakeMessages(refusal)).generate("s", "p", 10)
+    with pytest.raises(LlmContentError):
+        ClaudeClient(messages=FakeMessages(text_response(""))).generate("s", "p", 10)
+
+    fatal = api_error(anthropic.AuthenticationError, 401, "bad key")
+    with pytest.raises(LlmError) as info:
+        ClaudeClient(messages=FakeMessages(fatal)).generate("s", "p", 10)
+    assert not isinstance(info.value, LlmContentError)

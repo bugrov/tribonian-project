@@ -331,3 +331,26 @@ def test_page_with_absurd_proportions_is_rejected(
 
     with pytest.raises(ExtractionError, match="unusable dimensions"):
         PdfExtractor(never_ocr).extract(make_source(path, FileKind.PDF))
+
+
+def test_text_file_over_the_size_cap_is_cut_cleanly(
+    tmp_path: Path, make_source: SourceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("foldersum.extractors.text._MAX_TEXT_BYTES", 11)
+    path = tmp_path / "big.txt"
+    path.write_text("я" * 50, encoding="utf-8")  # 2 bytes per letter, so byte 11 splits a letter
+
+    doc = TextExtractor().extract(make_source(path, FileKind.TEXT))
+
+    assert doc.text == "я" * 5
+    assert "�" not in doc.text
+    assert doc.warnings == ("text truncated to the first 0 MB",)
+
+
+def test_text_file_within_the_cap_has_no_warning(
+    tmp_path: Path, make_source: SourceFactory
+) -> None:
+    path = tmp_path / "small.txt"
+    path.write_text("short", encoding="utf-8")
+
+    assert TextExtractor().extract(make_source(path, FileKind.TEXT)).warnings == ()

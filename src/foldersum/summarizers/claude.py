@@ -7,7 +7,7 @@ from typing import Any, Protocol, cast
 
 import anthropic
 
-from foldersum.errors import LlmError
+from foldersum.errors import LlmContentError, LlmError
 from foldersum.summarizers.base import answer_with_retry
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
@@ -67,11 +67,13 @@ class ClaudeClient:
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             category = getattr(details, "category", None) or "unspecified"
-            raise LlmError(f"Claude declined to process this document (category: {category})")
+            raise LlmContentError(
+                f"Claude declined to process this document (category: {category})"
+            )
         text = "".join(block.text for block in response.content if block.type == "text").strip()
         truncated = response.stop_reason == "max_tokens"
         if not text and not truncated:
-            raise LlmError(f"Model {self._model} returned an empty answer")
+            raise LlmContentError(f"Model {self._model} returned an empty answer")
         return text, truncated
 
     def _call(self, request: dict[str, Any]) -> Any:
@@ -89,6 +91,8 @@ class ClaudeClient:
             raise LlmError(f"Cannot reach the Claude API: {exc}") from exc
         except anthropic.APIStatusError as exc:
             raise LlmError(f"Claude API error {exc.status_code}: {exc.message}") from exc
+        except anthropic.APIError as exc:  # e.g. a response that fails the SDK's validation
+            raise LlmError(f"Claude API error: {exc.message}") from exc
         except TypeError as exc:
             if "authentication" not in str(exc).lower():
                 raise

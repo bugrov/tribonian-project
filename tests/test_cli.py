@@ -348,3 +348,17 @@ def test_host_with_the_claude_backend_warns(
 
     assert code == cli.EXIT_OK
     assert "--host is ignored" in capsys.readouterr().err
+
+
+def test_unreadable_folder_tree_is_a_clean_error(
+    folder: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def deny(_: Path) -> list[object]:
+        raise PermissionError("access denied")
+
+    monkeypatch.setattr(cli, "scan_folder", deny)
+
+    code = cli.main([str(folder), "--quiet"])
+
+    assert code == cli.EXIT_SOURCE_ERROR
+    assert "access denied" in capsys.readouterr().err

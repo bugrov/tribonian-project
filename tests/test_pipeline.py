@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from foldersum.errors import ExtractionError, LlmError
+from foldersum.errors import ExtractionError, LlmContentError, LlmError, UnsupportedFileError
 from foldersum.models import ExtractedDoc, FileKind, Lang, SourceFile
 from foldersum.pipeline import Summarizer
 from foldersum.prompts import OutLang, prompts_for
@@ -234,3 +234,90 @@ def test_summaries_cannot_break_out_of_the_folder_fence() -> None:
     folder_prompt = client.calls[-1][1]
     assert folder_prompt.count("<summaries>") == 1
     assert folder_prompt.count("</summaries>") == 1
+
+
+class RefusingOnce(FakeClient):
+    """Refuses (content error) the call whose prompt contains the marker, answers the rest."""
+
+    def __init__(self, marker: str) -> None:
+        super().__init__()
+        self._marker = marker
+
+    def generate(self, system: str, prompt: str, max_tokens: int) -> str:
+        if self._marker in prompt:
+            raise LlmContentError("declined")
+        return super().generate(system, prompt, max_tokens)
+
+
+def test_content_error_fails_only_that_file() -> None:
+    client = RefusingOnce("forbidden text")
+    docs: dict[str, ExtractedDoc | Exception] = {
+        "bad.txt": doc("bad.txt", "forbidden text"),
+        "ok.txt": doc("ok.txt", "fine text"),
+    }
+
+    result = Summarizer(client, extract=extractor(docs)).summarize_folder(
+        [source("bad.txt"), source("ok.txt")]
+    )
+
+    bad, ok = result.files
+    assert bad.error == "declined"
+    assert bad.summary is None
+    assert ok.summary == "SUMMARY1"
+    assert result.overall == "SUMMARY1"
+
+
+def test_failure_of_the_overall_step_keeps_the_file_summaries() -> None:
+    client = RefusingOnce("### ")  # only the folder prompt contains the file headings
+    docs: dict[str, ExtractedDoc | Exception] = {
+        "a.txt": doc("a.txt", "text a"),
+        "b.txt": doc("b.txt", "text b"),
+    }
+
+    result = Summarizer(client, extract=extractor(docs)).summarize_folder(
+        [source("a.txt"), source("b.txt")]
+    )
+
+    assert [f.summary for f in result.files] == ["SUMMARY1", "SUMMARY2"]
+    assert result.overall == "Не удалось составить общее саммари: declined"
+
+
+def test_unexpected_exception_while_reading_a_file_does_not_abort_the_run() -> None:
+    client = FakeClient()
+    docs: dict[str, ExtractedDoc | Exception] = {
+        "weird.png": MemoryError("out of memory"),
+        "ok.txt": doc("ok.txt", "fine text"),
+    }
+
+    result = Summarizer(client, extract=extractor(docs)).summarize_folder(
+        [source("weird.png"), source("ok.txt")]
+    )
+
+    weird, ok = result.files
+    assert weird.error == "MemoryError: out of memory"
+    assert not weird.skipped
+    assert ok.summary == "SUMMARY1"
+
+
+def test_unsupported_files_are_marked_skipped() -> None:
+    docs: dict[str, ExtractedDoc | Exception] = {
+        "thumbs.db": UnsupportedFileError("Unsupported file type (unknown): thumbs.db"),
+    }
+
+    result = Summarizer(FakeClient(), extract=extractor(docs)).summarize_folder(
+        [source("thumbs.db")]
+    )
+
+    assert result.files[0].skipped
+    assert result.files[0].error is not None
+
+
+def test_fatal_model_errors_still_stop_the_run() -> None:
+    class Down:
+        def generate(self, system: str, prompt: str, max_tokens: int) -> str:
+            raise LlmError("Cannot reach Ollama")
+
+    docs: dict[str, ExtractedDoc | Exception] = {"a.txt": doc("a.txt", "text")}
+
+    with pytest.raises(LlmError, match="Cannot reach"):
+        Summarizer(Down(), extract=extractor(docs)).summarize_folder([source("a.txt")])

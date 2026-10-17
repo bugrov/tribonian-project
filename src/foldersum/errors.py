@@ -14,4 +14,12 @@ class OcrError(ExtractionError):
 
 
 class LlmError(RuntimeError):
-    """The language model backend is unreachable or returned an unusable answer."""
+    """The language model backend is unreachable or returned an unusable answer.
+
+    Fatal for the whole run: connection, credentials, missing model, rate limits, timeouts.
+    """
+
+
+class LlmContentError(LlmError):
+    """The model could not process this particular input (refusal, empty answer, context
+    overflow). Only the file concerned fails; the run continues with the other files."""

@@ -5,7 +5,7 @@ from typing import Any, Protocol
 import httpx
 import ollama
 
-from foldersum.errors import LlmError
+from foldersum.errors import LlmContentError, LlmError
 from foldersum.summarizers.base import answer_with_retry
 
 DEFAULT_MODEL = "qwen2.5:7b"
@@ -61,11 +61,11 @@ class OllamaClient:
             raise LlmError(f"Cannot reach Ollama: {exc}") from exc
         used = getattr(response, "prompt_eval_count", None)
         if check_context and used is not None and used + max_tokens > self._num_ctx:
-            raise LlmError(
+            raise LlmContentError(
                 f"Prompt ({used} tokens) does not fit the {self._num_ctx}-token context; "
                 "lower the chunk size or raise num_ctx"
             )
         content = response.message.content
         if not content or not content.strip():
-            raise LlmError(f"Model {self._model} returned an empty answer")
+            raise LlmContentError(f"Model {self._model} returned an empty answer")
         return str(content).strip(), getattr(response, "done_reason", None) == "length"

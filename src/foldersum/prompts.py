@@ -42,6 +42,7 @@ class PromptSet:
     combine: str
     folder: str
     no_text: str
+    overall_failed: str
 
 
 _PROMPTS: dict[OutLang, PromptSet] = {
@@ -95,6 +96,7 @@ _PROMPTS: dict[OutLang, PromptSet] = {
             "markdown-разметки (без звёздочек и списков).\n\n<summaries>\n{text}\n</summaries>"
         ),
         no_text="Текст в файле не обнаружен.",
+        overall_failed="Не удалось составить общее саммари: {reason}",
     ),
     "en": PromptSet(
         system=(
@@ -146,6 +148,7 @@ _PROMPTS: dict[OutLang, PromptSet] = {
             "(no asterisks or lists).\n\n<summaries>\n{text}\n</summaries>"
         ),
         no_text="No text was found in the file.",
+        overall_failed="Could not produce the overall summary: {reason}",
     ),
 }
 

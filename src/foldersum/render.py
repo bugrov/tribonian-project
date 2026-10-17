@@ -14,6 +14,7 @@ class _Labels:
     title: str
     stats: str
     failed: str
+    skipped: str
     files: str
     kind: str
     language: str
@@ -24,8 +25,9 @@ class _Labels:
 _LABELS: dict[OutLang, _Labels] = {
     "ru": _Labels(
         title="Саммари папки",
-        stats="Файлов: {total}, обработано: {ok}, с ошибками: {failed}.",
+        stats="Файлов: {total}, обработано: {ok}, пропущено: {skipped}, с ошибками: {failed}.",
         failed="Не удалось обработать",
+        skipped="Пропущены (неподдерживаемый формат)",
         files="Файлы",
         kind="тип",
         language="язык",
@@ -34,8 +36,9 @@ _LABELS: dict[OutLang, _Labels] = {
     ),
     "en": _Labels(
         title="Folder summary",
-        stats="Files: {total}, processed: {ok}, failed: {failed}.",
+        stats="Files: {total}, processed: {ok}, skipped: {skipped}, failed: {failed}.",
         failed="Could not be processed",
+        skipped="Skipped (unsupported format)",
         files="Files",
         kind="type",
         language="language",
@@ -57,24 +60,37 @@ def _oneline(text: str | None) -> str:
     return " ".join((text or "").split())
 
 
+def _failed_and_skipped(summary: FolderSummary) -> tuple[list[FileResult], list[FileResult]]:
+    """Split out the files that failed and those skipped as unsupported (not counted as failed)."""
+    failed = [r for r in summary.files if r.error and not r.skipped]
+    skipped = [r for r in summary.files if r.skipped]
+    return failed, skipped
+
+
 def render_markdown(
     summary: FolderSummary, root: Path, per_file: bool, out_lang: OutLang = "ru"
 ) -> str:
     """Overall summary, a short stats line, failures, and optionally one section per file."""
     labels = _LABELS[out_lang]
-    failed = [r for r in summary.files if r.error]
+    failed, skipped = _failed_and_skipped(summary)
     lines = [
         f"# {labels.title}",
         "",
         summary.overall,
         "",
         labels.stats.format(
-            total=len(summary.files), ok=len(summary.files) - len(failed), failed=len(failed)
+            total=len(summary.files),
+            ok=len(summary.files) - len(failed) - len(skipped),
+            skipped=len(skipped),
+            failed=len(failed),
         ),
     ]
     if failed:
         lines += ["", f"## {labels.failed}", ""]
         lines += [f"- {_oneline(_relative(r, root))}: {_oneline(r.error)}" for r in failed]
+    if skipped:
+        lines += ["", f"## {labels.skipped}", ""]
+        lines += [f"- {_oneline(_relative(r, root))}" for r in skipped]
     if per_file:
         lines += ["", f"## {labels.files}"]
         for result in (r for r in summary.files if not r.error):
@@ -97,17 +113,20 @@ def _file_json(result: FileResult, root: Path) -> dict[str, Any]:
         "summary": result.summary,
         "warnings": list(result.warnings),
         "error": result.error,
+        "skipped": result.skipped,
     }
 
 
 def render_json(summary: FolderSummary, root: Path, per_file: bool) -> str:
     """JSON with the overall summary; ``files`` is included only with ``per_file``."""
-    failed = [r for r in summary.files if r.error]
+    failed, skipped = _failed_and_skipped(summary)
     data: dict[str, Any] = {
         "overall": summary.overall,
         "files_total": len(summary.files),
         "files_failed": len(failed),
+        "files_skipped": len(skipped),
         "errors": [{"path": _relative(r, root), "error": r.error} for r in failed],
+        "skipped": [_relative(r, root) for r in skipped],
     }
     if per_file:
         data["files"] = [_file_json(r, root) for r in summary.files]

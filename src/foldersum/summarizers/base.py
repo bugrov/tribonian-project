@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from typing import Protocol
 
-from foldersum.errors import LlmError
+from foldersum.errors import LlmContentError, LlmError
 
 _SENTENCE_END = re.compile(r"[.!?…»)](?=\s|$)")
 
@@ -44,5 +44,5 @@ def answer_with_retry(ask: Callable[[int, bool], tuple[str, bool]], max_tokens: 
         return drop_unfinished_sentence(answer)
     result = drop_unfinished_sentence(retry) if retry_truncated else retry
     if not result:
-        raise LlmError("The model produced no answer within the token limit")
+        raise LlmContentError("The model produced no answer within the token limit")
     return result

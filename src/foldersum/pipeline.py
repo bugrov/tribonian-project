@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from foldersum.chunking import split_text
-from foldersum.errors import ExtractionError
+from foldersum.errors import ExtractionError, LlmContentError, UnsupportedFileError
 from foldersum.extractors import extract_document
 from foldersum.models import ExtractedDoc, Lang, SourceFile
 from foldersum.prompts import OutLang, clean_name, clean_text, prompts_for
@@ -27,6 +27,7 @@ class FileResult:
     warnings: tuple[str, ...] = ()
     error: str | None = None
     empty: bool = False  # read fine, but contained no text, so nothing was summarized
+    skipped: bool = False  # unsupported file type: not a failure, just not handled
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,11 @@ class Summarizer:
             self._progress(f"[{number}/{len(sources)}] {source.path.name}")
             results.append(self._summarize_file(source))
         summaries = [(r.source.path.name, r.summary) for r in results if r.summary and not r.empty]
-        return FolderSummary(overall=self._overall(summaries), files=tuple(results))
+        try:
+            overall = self._overall(summaries)
+        except LlmContentError as exc:  # keep the per-file results even if this one step fails
+            overall = self._prompts.overall_failed.format(reason=exc)
+        return FolderSummary(overall=overall, files=tuple(results))
 
     def summarize_document(self, doc: ExtractedDoc) -> str:
         """Summarize one document, splitting it into chunks when it is too long for the model."""
@@ -86,10 +91,16 @@ class Summarizer:
         )
 
     def _summarize_file(self, source: SourceFile) -> FileResult:
+        """Summarize one file. Problems with this file alone (unreadable, unsupported, refused
+        by the model) are recorded in the result; only run-wide model failures propagate."""
         try:
             doc = self._extract(source)
+        except UnsupportedFileError as exc:
+            return FileResult(source=source, summary=None, error=str(exc), skipped=True)
         except ExtractionError as exc:
             return FileResult(source=source, summary=None, error=str(exc))
+        except Exception as exc:  # whatever a parser or OCR raises must not abort the whole run
+            return FileResult(source=source, summary=None, error=f"{type(exc).__name__}: {exc}")
         if not doc.text.strip():
             return FileResult(
                 source=source,
@@ -98,7 +109,12 @@ class Summarizer:
                 warnings=doc.warnings,
                 empty=True,
             )
-        summary = self.summarize_document(doc)
+        try:
+            summary = self.summarize_document(doc)
+        except LlmContentError as exc:
+            return FileResult(
+                source=source, summary=None, lang=doc.lang, warnings=doc.warnings, error=str(exc)
+            )
         return FileResult(source=source, summary=summary, lang=doc.lang, warnings=doc.warnings)
 
     def _overall(self, summaries: list[tuple[str, str]]) -> str:

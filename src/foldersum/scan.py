@@ -54,7 +54,10 @@ def _describe(path: Path) -> SourceFile:
     try:
         return SourceFile(path=path, kind=detect_kind(path), size=path.stat().st_size)
     except OSError:
-        return SourceFile(path=path, kind=FileKind.UNKNOWN, size=0)
+        # Keep the kind the extension suggests, so reading it fails later with the real OS error
+        # instead of the file being reported as an unsupported type.
+        kind = _EXTENSIONS.get(path.suffix.lower(), FileKind.UNKNOWN)
+        return SourceFile(path=path, kind=kind, size=0)
 
 
 def scan_folder(root: Path) -> list[SourceFile]:

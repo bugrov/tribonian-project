@@ -120,7 +120,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except FetchError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_SOURCE_ERROR
-    sources = scan_folder(root)
+    try:
+        sources = scan_folder(root)
+    except OSError as exc:
+        print(f"error: cannot read {root}: {exc}", file=sys.stderr)
+        return EXIT_SOURCE_ERROR
     if not sources:
         print(f"error: no files found in {root}", file=sys.stderr)
         return EXIT_NOTHING_TO_SUMMARIZE

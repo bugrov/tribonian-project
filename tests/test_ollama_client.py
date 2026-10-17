@@ -6,7 +6,7 @@ import httpx
 import ollama
 import pytest
 
-from foldersum.errors import LlmError
+from foldersum.errors import LlmContentError, LlmError
 from foldersum.summarizers.ollama import OllamaClient
 
 
@@ -179,3 +179,14 @@ def test_failed_retry_falls_back_to_the_first_trimmed_answer() -> None:
     answer = OllamaClient(num_ctx=8192, client=fake).generate("s", "p", 800)
 
     assert answer == "One sentence. Another sentence."
+
+
+def test_content_problems_are_content_errors_but_connection_problems_are_not() -> None:
+    with pytest.raises(LlmContentError):
+        OllamaClient(client=FakeChat("")).generate("s", "p", 10)
+    with pytest.raises(LlmContentError):
+        OllamaClient(num_ctx=8192, client=FakeChat(prompt_eval_count=7900)).generate("s", "p", 800)
+
+    with pytest.raises(LlmError) as info:
+        OllamaClient(client=FakeChat(error=ConnectionError("refused"))).generate("s", "p", 10)
+    assert not isinstance(info.value, LlmContentError)
