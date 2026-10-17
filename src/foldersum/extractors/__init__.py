@@ -3,6 +3,7 @@
 from foldersum.errors import UnsupportedFileError
 from foldersum.extractors.base import Extractor
 from foldersum.extractors.image import ImageExtractor
+from foldersum.extractors.office import OfficeExtractor
 from foldersum.extractors.pdf import PdfExtractor
 from foldersum.extractors.text import TextExtractor
 from foldersum.models import ExtractedDoc, FileKind, SourceFile
@@ -15,6 +16,7 @@ def extract_document(source: SourceFile, ocr: OcrFn = ocr_image) -> ExtractedDoc
         FileKind.PDF: PdfExtractor(ocr),
         FileKind.IMAGE: ImageExtractor(ocr),
         FileKind.TEXT: TextExtractor(),
+        FileKind.OFFICE: OfficeExtractor(),
     }
     extractor = extractors.get(source.kind)
     if extractor is None:
