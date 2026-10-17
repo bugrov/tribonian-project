@@ -1,4 +1,4 @@
-"""Exceptions raised while extracting content from files."""
+"""Exceptions raised by foldersum."""
 
 
 class ExtractionError(RuntimeError):
@@ -11,3 +11,7 @@ class UnsupportedFileError(ExtractionError):
 
 class OcrError(ExtractionError):
     """OCR failed or Tesseract (or a language pack) is not available."""
+
+
+class LlmError(RuntimeError):
+    """The language model backend is unreachable or returned an unusable answer."""

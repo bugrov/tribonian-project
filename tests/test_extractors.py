@@ -307,3 +307,27 @@ def test_transparent_png_is_composited_on_white(tmp_path: Path, make_source: Sou
     ImageExtractor(fake_ocr).extract(make_source(path, FileKind.IMAGE))
 
     assert seen == [255]
+
+
+def test_oversized_image_is_rejected_before_decoding(
+    tmp_path: Path, make_source: SourceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("foldersum.extractors.image._MAX_INPUT_PIXELS", 100)
+    path = tmp_path / "big.png"
+    Image.new("RGB", (20, 20), "white").save(path)
+
+    with pytest.raises(ExtractionError, match="too large"):
+        ImageExtractor(never_ocr).extract(make_source(path, FileKind.IMAGE))
+
+
+def test_page_with_absurd_proportions_is_rejected(
+    tmp_path: Path, make_source: SourceFactory
+) -> None:
+    path = tmp_path / "strip.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=1, height=5_000_000)
+    with path.open("wb") as handle:
+        writer.write(handle)
+
+    with pytest.raises(ExtractionError, match="unusable dimensions"):
+        PdfExtractor(never_ocr).extract(make_source(path, FileKind.PDF))

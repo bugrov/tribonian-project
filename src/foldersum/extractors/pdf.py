@@ -14,6 +14,7 @@ from foldersum.ocr import MAX_OCR_PIXELS, OcrFn, ocr_image
 
 _MIN_TEXT_CHARS_PER_PAGE = 20
 _RENDER_SCALE = 2.0
+_MAX_RENDER_SIDE = 10_000
 
 
 def _read_text_layer(source: SourceFile) -> list[str]:
@@ -85,7 +86,13 @@ class PdfExtractor:
         page = document[index]
         try:
             width, height = page.get_size()
-            scale = min(_RENDER_SCALE, math.sqrt(MAX_OCR_PIXELS / max(width * height, 1)))
+            scale = min(
+                _RENDER_SCALE,
+                math.sqrt(MAX_OCR_PIXELS / max(width * height, 1)),
+                _MAX_RENDER_SIDE / max(width, height, 1),
+            )
+            if min(width, height) * scale < 1:
+                raise ExtractionError(f"Page {index + 1} has unusable dimensions {width}x{height}")
             image: Image.Image = page.render(scale=scale).to_pil()
             return image
         finally:
