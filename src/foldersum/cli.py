@@ -60,7 +60,10 @@ def _build_client(args: argparse.Namespace) -> tuple[LlmClient, str, int]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="foldersum",
-        description="Summarize the contents of a folder of documents (PDF, images, text).",
+        description=(
+            "Summarize the contents of a folder of documents: PDF, images (OCR), text, "
+            "DOCX, XLSX and PPTX."
+        ),
     )
     parser.add_argument("source", help="local folder or a public Google Drive folder link")
     parser.add_argument(
@@ -86,8 +89,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lang", choices=["ru", "en"], default="ru", help="summary language (default: ru)"
     )
-    parser.add_argument("--format", choices=["md", "json"], default="md", dest="fmt")
-    parser.add_argument("--output", type=Path, default=None, help="write the result to a file")
+    parser.add_argument(
+        "--format",
+        choices=["md", "json"],
+        default="md",
+        dest="fmt",
+        help="output format (default: md)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="write the result to this file instead of stdout (not inside the summarized folder)",
+    )
     parser.add_argument(
         "--download-dir",
         type=Path,

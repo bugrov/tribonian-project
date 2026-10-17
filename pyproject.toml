@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "foldersum"
 version = "0.1.0"
 description = "Summarize the contents of a folder of mixed documents (PDF, images, ...)"
-readme = "CLAUDE.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "defusedxml>=0.7",
